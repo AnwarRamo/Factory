@@ -7,7 +7,13 @@ import apiClient from "@/lib/api-client";
 import axios from "axios";
 import { resetAuthVerificationCache, verifyAuthSession } from "@/lib/auth-verify";
 import { useAuthStore } from "@/stores/auth-store";
-import { clearAuthAccessToken, setAuthAccessToken } from "@/lib/auth-session";
+import { clearAuthAccessToken, getAuthAccessToken, getStoredUser, setAuthAccessToken } from "@/lib/auth-session";
+
+const hasClientAuthHints = () => {
+  const token = getAuthAccessToken();
+  const storedUser = getStoredUser<unknown>();
+  return Boolean((typeof token === "string" && token.trim()) || storedUser);
+};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,6 +24,13 @@ export default function LoginPage() {
 
   useEffect(() => {
     let active = true;
+
+    if (!hasClientAuthHints()) {
+      setStatus("unauthenticated");
+      return () => {
+        active = false;
+      };
+    }
 
     const checkExistingSession = async () => {
       const result = await verifyAuthSession();

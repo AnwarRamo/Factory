@@ -1,7 +1,7 @@
 import axios from "axios";
 import apiClient from "@/lib/api-client";
 
-const SUCCESS_TTL_MS = 10_000;
+const SUCCESS_TTL_MS = 60_000;
 const FAILURE_TTL_MS = 1_500;
 const RATE_LIMIT_COOLDOWN_MS = 15_000;
 

@@ -45,6 +45,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const isHydrated = useIsHydrated();
+  const shouldPrefetch = process.env.NODE_ENV === "production";
 
   const currentUser = useAuthStore((state) => state.user);
   const clear = useAuthStore((state) => state.clear);
@@ -149,6 +150,7 @@ export default function Sidebar() {
                 ) : (
                   <Link
                     href={item.href || '#'}
+                    prefetch={shouldPrefetch}
                     onClick={() => setOpenMenu(null)}
                     className={`flex items-center gap-3 py-2.5 px-4 rounded-xl transition-all duration-300 group relative overflow-hidden
                       ${isMainActive ? 'bg-linear-to-l from-[#00bba7]/10 to-transparent' : 'hover:bg-slate-50/80'}
@@ -182,7 +184,7 @@ export default function Sidebar() {
                           <Link
                             key={sub.name}
                             href={sub.href}
-                            prefetch={false}
+                            prefetch={shouldPrefetch}
                             className={`relative text-sm py-2.5 px-4 rounded-xl transition-all duration-300 flex items-center gap-3
                               ${isSubActive ? 'font-bold text-[#00bba7] bg-white shadow-sm ring-1 ring-slate-100' : 'font-medium text-slate-400 hover:text-slate-700 hover:bg-slate-50 hover:-translate-x-1'}
                             `}

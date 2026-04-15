@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
@@ -20,14 +20,21 @@ export default function DashboardLayout({
 }>) {
   const router = useRouter();
   const pathname = usePathname();
-  const [checking, setChecking] = useState(true);
   const status = useAuthStore((state) => state.status);
   const currentUser = useAuthStore((state) => state.user);
   const hasAnyRole = useAuthStore((state) => state.hasAnyRole);
   const setStatus = useAuthStore((state) => state.setStatus);
   const clear = useAuthStore((state) => state.clear);
+  const hasLocalAuth = status === "authenticated" || Boolean(currentUser);
 
   useEffect(() => {
+    if (hasLocalAuth) {
+      if (status !== "authenticated") {
+        setStatus("authenticated");
+      }
+      return;
+    }
+
     let active = true;
 
     const verifySession = async () => {
@@ -39,7 +46,6 @@ export default function DashboardLayout({
 
       if (result.authorized) {
         setStatus("authenticated");
-        setChecking(false);
         return;
       }
 
@@ -47,7 +53,6 @@ export default function DashboardLayout({
       if (isHardAuthFailure) {
         setStatus("unauthenticated");
         clear();
-        setChecking(false);
         router.replace("/login");
         return;
       }
@@ -58,13 +63,10 @@ export default function DashboardLayout({
         || result.status === 504
         || typeof result.status === "undefined";
 
-      if (isTransientFailure && currentUser) {
-        setStatus("authenticated");
-        setChecking(false);
+      if (isTransientFailure) {
         return;
       }
 
-      setChecking(false);
       router.replace("/login");
     };
 
@@ -73,7 +75,7 @@ export default function DashboardLayout({
     return () => {
       active = false;
     };
-  }, [router, clear, currentUser, setStatus]);
+  }, [router, clear, hasLocalAuth, setStatus, status]);
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -84,7 +86,7 @@ export default function DashboardLayout({
     }
   }, [hasAnyRole, pathname, router, status]);
 
-  if (checking) {
+  if (!hasLocalAuth && status !== "unauthenticated") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <Loader2 className="animate-spin text-blue-600" size={28} />
@@ -92,7 +94,7 @@ export default function DashboardLayout({
     );
   }
 
-  if (status !== "authenticated") {
+  if (!hasLocalAuth) {
     return null;
   }
 

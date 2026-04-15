@@ -10,7 +10,7 @@ import { DEFAULT_API_URL, normalizeApiUrl } from "@/lib/api-url";
 const API_URL = normalizeApiUrl(process.env.NEXT_PUBLIC_API_URL, DEFAULT_API_URL);
 const IS_DEVELOPMENT = process.env.NODE_ENV !== "production";
 const SESSION_CHECK_TIMEOUT_MS = IS_DEVELOPMENT ? 600 : 2_500;
-const SESSION_SUCCESS_CACHE_TTL_MS = 10_000;
+const SESSION_SUCCESS_CACHE_TTL_MS = 60_000;
 const SESSION_FAILURE_CACHE_TTL_MS = 1_500;
 const SESSION_RATE_LIMIT_CACHE_TTL_MS = 15_000;
 const SESSION_CACHE_MAX_ENTRIES = 128;
@@ -189,6 +189,24 @@ const buildRedirectResponse = (
   return NextResponse.redirect(url);
 };
 
+const buildRewriteResponse = (
+  request: NextRequest,
+  pathname: string,
+  params?: Record<string, string>,
+) => {
+  const url = request.nextUrl.clone();
+  url.pathname = pathname;
+  url.search = "";
+
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.set(key, value);
+    }
+  }
+
+  return NextResponse.rewrite(url);
+};
+
 const checkSession = async (request: NextRequest): Promise<SessionCheckResult> => {
   const cacheKey = getSessionCacheKey(request);
   const cachedResult = getCachedSessionResult(cacheKey);
@@ -273,14 +291,14 @@ export async function proxy(request: NextRequest) {
 
   if (isRootRoute) {
     if (!hasHints) {
-      return buildRedirectResponse(request, "/login");
+      return buildRewriteResponse(request, "/login");
     }
 
     const session = await checkSession(request);
 
     return session.authorized
       ? buildRedirectResponse(request, "/home")
-      : buildRedirectResponse(request, "/login");
+      : buildRewriteResponse(request, "/login");
   }
 
   if (isLoginRoute) {
