@@ -1,0 +1,145 @@
+import { useMutation } from '@tanstack/react-query';
+import apiClient from '@/lib/api-client';
+
+type ImportEntity = 'employees' | 'products' | 'inventory' | 'attendance';
+
+const entityToBackend: Record<ImportEntity, 'employees' | 'products' | 'attendance'> = {
+  employees: 'employees',
+  products: 'products',
+  inventory: 'products',
+  attendance: 'attendance',
+};
+
+const supportedForUpload = new Set<string>(['employees', 'products', 'attendance']);
+
+const toMessage = (error: unknown, fallback: string) => {
+  const err = error as {
+    response?: {
+      status?: number;
+      data?: {
+        message?: string | string[];
+        error?: string | { message?: string };
+      };
+    };
+    message?: string;
+  };
+
+  if (err?.response?.status === 401) {
+    return 'انتهت الجلسة أو لم يتم تسجيل الدخول. يرجى تسجيل الدخول مرة أخرى.';
+  }
+
+  const apiMessage = err?.response?.data?.message;
+  if (Array.isArray(apiMessage) && apiMessage.length > 0) return apiMessage.join(' | ');
+  if (typeof apiMessage === 'string' && apiMessage.trim()) return apiMessage;
+
+  const nestedError = err?.response?.data?.error;
+  if (typeof nestedError === 'string' && nestedError.trim()) return nestedError;
+  if (nestedError && typeof nestedError === 'object' && nestedError.message) return nestedError.message;
+
+  return err?.message || fallback;
+};
+
+const resolveEntity = (entity: string) => {
+  return entityToBackend[(entity as ImportEntity)] || entity;
+};
+
+export const useImports = () => {
+  const upload = useMutation({
+    mutationFn: async (payload: { entity: string; file: File }) => {
+      const backendEntity = resolveEntity(payload.entity);
+      if (!supportedForUpload.has(backendEntity)) {
+        throw new Error('الاستيراد لهذا القسم غير مدعوم حالياً من الخادم');
+      }
+
+      const form = new FormData();
+      form.append('file', payload.file);
+
+      const endpoint = backendEntity === 'attendance' ? '/attendance/upload' : `/imports/${backendEntity}/async`;
+      const res = await apiClient.post(endpoint, form);
+
+      if (backendEntity === 'attendance') {
+        const payloadData = res.data || {};
+        return {
+          ...payloadData,
+          successRows: Number(payloadData.importedRows || 0),
+          errorRows: Number(payloadData.failedRows || 0),
+          totalRows: Number(payloadData.totalRows || 0),
+          jobId: payloadData.jobId || null,
+        };
+      }
+
+      return res.data;
+    },
+  });
+
+  const validate = useMutation({
+    mutationFn: async (payload: { entity: string; file: File }) => {
+      const backendEntity = resolveEntity(payload.entity);
+      if (!supportedForUpload.has(backendEntity)) {
+        throw new Error('التحقق لهذا القسم غير مدعوم حالياً من الخادم');
+      }
+
+      if (backendEntity === 'attendance') {
+        // Attendance import endpoint performs row-level validation during upload.
+        return {
+          totalRows: 0,
+          errorRows: 0,
+          successRows: 0,
+          errors: [],
+        };
+      }
+
+      const form = new FormData();
+      form.append('file', payload.file);
+      const res = await apiClient.post(`/imports/${backendEntity}/validate`, form);
+      return res.data;
+    },
+  });
+
+  const template = useMutation({
+    mutationFn: async (entity: string) => {
+      const backendEntity = resolveEntity(entity);
+      if (!supportedForUpload.has(backendEntity)) {
+        throw new Error('لا يوجد قالب لهذا القسم حالياً');
+      }
+
+      const res = await apiClient.get(`/imports/templates/${backendEntity}`, {
+        responseType: 'blob',
+      });
+      return res.data;
+    },
+  });
+
+  return {
+    upload: {
+      ...upload,
+      mutateAsync: async (payload: { entity: string; file: File }) => {
+        try {
+          return await upload.mutateAsync(payload);
+        } catch (error) {
+          throw new Error(toMessage(error, 'فشل رفع الملف'));
+        }
+      },
+    },
+    validate: {
+      ...validate,
+      mutateAsync: async (payload: { entity: string; file: File }) => {
+        try {
+          return await validate.mutateAsync(payload);
+        } catch (error) {
+          throw new Error(toMessage(error, 'فشل التحقق من الملف'));
+        }
+      },
+    },
+    template: {
+      ...template,
+      mutateAsync: async (entity: string) => {
+        try {
+          return await template.mutateAsync(entity);
+        } catch (error) {
+          throw new Error(toMessage(error, 'فشل تحميل القالب'));
+        }
+      },
+    },
+  };
+};
